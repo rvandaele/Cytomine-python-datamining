@@ -4,12 +4,7 @@ from ldmtools import *
 import numpy as np
 from multiprocessing import Pool
 import scipy.ndimage as snd
-import scipy.misc as misc
-from scipy.stats import multivariate_normal
-from sumproduct import Variable, Factor, FactorGraph
-from donner_phase2 import *
 from sklearn.externals import joblib
-from donner_phase3 import *
 from download import *
 
 """
@@ -158,7 +153,9 @@ Phase 2: Agregation
 """
 
 
-def image_dataset_phase_2(repository, image_number, x, y, feature_offsets, R_offsets, delta, P):
+def image_dataset_phase_2(repository, image_number, x, y, feature_offsets, R_offsets, delta):
+	# print "PHASE 2 IMAGE NUMBER",image_number+1
+
 	img = makesize(snd.zoom(readimage(repository, image_number), delta), 1)
 	(h, w) = img.shape
 	mask = np.ones((h, w), 'bool')
@@ -173,25 +170,115 @@ def image_dataset_phase_2(repository, image_number, x, y, feature_offsets, R_off
 	x += 1
 	y += 1
 
-	rep = np.zeros((x.size * nroff, 2))
-	xs = np.zeros(x.size * nroff).astype('int')
-	ys = np.zeros(x.size * nroff).astype('int')
-	number = np.zeros(x.size * nroff)
+	rep = np.zeros((nroff, 2))
+	number = image_number
 
-	for ip in range(x.size):
-		xs[ip * nroff:(ip + 1) * nroff] = x[ip] + R_offsets[:, 0]
-		ys[ip * nroff:(ip + 1) * nroff] = y[ip] + R_offsets[:, 1]
-		number[ip * nroff:(ip + 1) * nroff] = ip
-		rep[ip * nroff:(ip + 1) * nroff, 0] = R_offsets[:, 0]
-		rep[ip * nroff:(ip + 1) * nroff, 1] = R_offsets[:, 1]
+	xs = (x + R_offsets[:, 0]).astype('int')
+	ys = (y + R_offsets[:, 1]).astype('int')
 
+	rep[:, 0] = R_offsets[:, 0]
+	rep[:, 1] = R_offsets[:, 1]
 	dataset = dataset_from_coordinates(img, xs, ys, feature_offsets)
-
 	return dataset, rep, number
 
 
 def dataset_mp_helper_phase_2(jobargs):
 	return image_dataset_phase_2(*jobargs)
+
+def get_dataset_phase_2(repository, tr_images, image_ids, n_jobs, id_term, feature_offsets, R_offsets, delta):
+	p = Pool(n_jobs)
+	# (Xc,Yc) = getcoords(repository.rstrip('/')+'/txt/')
+	(Xc, Yc, Xp, Yp, ims) = getcoords(repository.rstrip('/') + '/txt/', id_term)
+	nims = Xc.size
+	jobargs = []
+	for i in range(nims):
+		if (image_ids[i] in tr_images):
+			jobargs.append((repository, image_ids[i], Xc[i], Yc[i], feature_offsets, R_offsets, delta))
+	data = p.map(dataset_mp_helper_phase_2, jobargs)
+	p.close()
+	p.join()
+
+	(nroff, blc) = R_offsets.shape
+	nims = len(tr_images)
+	DATASET = np.zeros((nims * nroff, feature_offsets[:, 0].size))
+	REP = np.zeros((nims * nroff, 2))
+	NUMBER = np.zeros(nims * nroff)
+
+	b = 0
+	for (d, r, n) in data:
+		(nd, nw) = d.shape
+		DATASET[b:b + nd, :] = d
+		REP[b:b + nd, :] = r
+		NUMBER[b:b + nd] = n
+		b = b + nd
+	DATASET = DATASET[0:b, :]
+	REP = REP[0:b]
+	NUMBER = NUMBER[0:b]
+	return DATASET, REP, NUMBER
+
+def build_phase_2_model(repository, tr_image=[], image_ids=[], n_jobs=1, IP=0, NT=32, F=100, R=3, N=500, sigma=10, delta=0.25):
+	std_matrix = np.eye(2) * (sigma ** 2)
+	feature_offsets = np.round(np.random.multivariate_normal([0, 0], std_matrix, NT * F)).astype('int')
+
+	R_offsets = np.zeros((N, 2))
+	dis = np.random.ranf(N) * R
+	ang = np.random.ranf(N) * 2 * np.pi
+
+	R_offsets[:, 0] = np.round((dis * np.cos(ang))).astype('int')
+	R_offsets[:, 1] = np.round((dis * np.sin(ang))).astype('int')
+
+	(dataset, rep, number) = get_dataset_phase_2(repository, tr_image, image_ids, n_jobs, IP, feature_offsets, R_offsets, delta)
+
+	return dataset, rep, number, feature_offsets
+
+"""
+PHASE 3
+"""
+
+
+def build_edgematrix_phase_3(Xc, Yc, sde, delta, T):
+	Xc = Xc * delta
+	Yc = Yc * delta
+	(nims, nldms) = Xc.shape
+
+	(nims, nldms) = Xc.shape
+
+	differential_entropy = np.eye(nldms) + np.inf
+
+	c1 = np.zeros((nims, 2))
+	c2 = np.zeros((nims, 2))
+
+	# std_matrix = np.eye(2)*(sde**2)
+	"""
+	img = readimage(repository,1)
+	(height,width) = img.shape
+	height = int(np.round(height*delta))
+	width = int(np.round(width*delta))
+	img = None
+	coords = np.zeros((height*width,2))
+	coords[:,0] = np.floor(np.arange(height*width)/width)
+	coords[:,1] = np.mod(np.arange(height*width),width)
+	"""
+	for ldm1 in range(nldms):
+		c1[:, 0] = Xc[:, ldm1]
+		c1[:, 1] = Yc[:, ldm1]
+		for ldm2 in range(ldm1 + 1, nldms):
+			c2[:, 0] = Xc[:, ldm2]
+			c2[:, 1] = Yc[:, ldm2]
+
+			diff = c1 - c2
+
+			d = diff - np.mean(diff, axis=0)
+			d = np.mean(np.sqrt((d[:, 0] ** 2) + (d[:, 1] ** 2)))
+			differential_entropy[ldm1, ldm2] = d
+			differential_entropy[ldm2, ldm1] = d
+
+	edges = np.zeros((nldms, T))
+
+	for ldm in range(nldms):
+		edges[ldm, :] = np.argsort(differential_entropy[ldm, :])[0:T]
+
+	return edges.astype(int)
 
 
 def main():
