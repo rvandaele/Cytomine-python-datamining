@@ -25,30 +25,21 @@ import cytomine
 import sys
 
 #connect to cytomine : parameters to set
-cytomine_host=""
-cytomine_public_key=""
-cytomine_private_key=""
-id_project=0
+cytomine_host="demo.cytomine.be"
+cytomine_public_key="0ab78d51-3a6e-40e1-9b1d-d42c28bc1923"
+cytomine_private_key="817d2e30-b4df-41d2-bb4b-fb29910b1d4e"
+id_project=6575282
 
 #Connection to Cytomine Core
 conn = cytomine.Cytomine(cytomine_host, cytomine_public_key, cytomine_private_key, base_path = '/api/', working_path = '/tmp/', verbose= True)
 
 
 #define software parameter template
-software = conn.add_software("Landmark_Model_Predictor", "pyxitSuggestedTermJobService","ValidateAnnotation")
+software = conn.add_software("Landmark_Generic_Predictor", "pyxitSuggestedTermJobService","ValidateAnnotation")
+conn.add_software_parameter("cytomine_models",             software.id, "String", None, True, 1 , False)
+conn.add_software_parameter("cytomine_predict_images",     software.id, "String", None, True, 2 , False)
+conn.add_software_parameter("prediction_error",            software.id, "String", None, True, 3 , False)
 
-conn.add_software_parameter("landmark_terms",           software.id, "List", None, True, 1 , False)
-conn.add_software_parameter("landmark_r",               software.id, "List", None, True, 2 , False)
-conn.add_software_parameter("landmark_rmax",            software.id, "List", None, True, 3 , False)
-conn.add_software_parameter("landmark_p",               software.id, "List", None, True, 4 , False)
-conn.add_software_parameter("landmark_npred",           software.id, "List", None, True, 5 , False)
-conn.add_software_parameter("landmark_ntimes",          software.id, "List", None, True, 6 , False)
-conn.add_software_parameter("landmark_alpha",           software.id, "List", None, True, 7 , False)
-conn.add_software_parameter("landmark_depth",           software.id, "List", None, True, 8 , False)
-conn.add_software_parameter("landmark_window_size",     software.id, "List", None, True, 8 , False)
-conn.add_software_parameter("forest_n_estimators",      software.id, "List", None, True, 9 , False)
-conn.add_software_parameter("forest_max_features",      software.id, "List", None, True, 10, False)
-conn.add_software_parameter("forest_min_samples_split", software.id, "List", None, True, 11, False)
 #add software to a given project
 addSoftwareProject = conn.add_software_project(id_project,software.id)
 

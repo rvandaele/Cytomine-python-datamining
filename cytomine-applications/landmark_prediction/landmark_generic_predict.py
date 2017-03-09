@@ -21,14 +21,10 @@ __author__ = "Vandaele Rémy <remy.vandaele@ulg.ac.be>"
 __contributors__ = ["Marée Raphaël <raphael.maree@ulg.ac.be>"]
 __copyright__ = "Copyright 2010-2016 University of Liège, Belgium, http://www.cytomine.be/"
 import sys
-sys.path.append('/software_router/algo/landmark_model_builder/')
 from sklearn.externals import joblib
 from shapely.geometry import Point
 import optparse
-from download import *
 from cytomine import cytomine, models
-from ldmtools import *
-from build_generic_model import build_dataset_image
 
 """
 Given the classifier clf, this function will try to find the landmark on the
@@ -98,21 +94,6 @@ def str2bool(v):
 
 if __name__ == "__main__":
 
-	parameters = {
-		'cytomine_host': '',
-		'cytomine_public_key': '',
-		'cytomine_private_key': '',
-		'cytomine_id_software': 0,
-		'cytomine_base_path': '',
-		'cytomine_working_path': '',
-		'cytomine_id_project': 0,
-		'cytomine_predict_images': 0,
-		'model_load_from': '',
-		'cytomine_model_names': '',
-		'image_type': '',
-		'verbose': False
-	}
-
 	p = optparse.OptionParser(description='Cytomine Landmark Detection : Landmark Detection', prog='Cytomine Landmark Detection : Landmark Dectector', version='0.1')
 	p.add_option('--cytomine_host', type="string", default='beta.cytomine.be', dest="cytomine_host", help="The Cytomine host (eg: beta.cytomine.be, localhost:8080)")
 	p.add_option('--cytomine_public_key', type="string", default='XXX', dest="cytomine_public_key", help="Cytomine public key")
@@ -123,39 +104,58 @@ if __name__ == "__main__":
 	p.add_option('--cytomine_id_project', type="int", dest="cytomine_id_project", help="The Cytomine project identifier")
 	p.add_option('--cytomine_predict_images', type='string', dest='cytomine_predict_images', help='The identifier of the images to predict, separated by a comma (no spaces).')
 	p.add_option('--model_load_from', default='/tmp/', type="string", dest="model_load_from", help="The repository where the models are stored")
-	p.add_option('--model_names', type="string", dest="model_names", help="The names of the models to use for detection (separated by commas, no spaces)")
+	p.add_option('--model_names', type="string", dest="cytomine_model_names", help="The names of the models to use for detection (separated by commas, no spaces)")
 	p.add_option('--image_type', type='string', default='jpg', dest='image_type', help="The type of the images that will be used (jpg, bmp, png,...)")
 	p.add_option('--verbose', type="string", default="0", dest="verbose", help="Turn on (1) or off (0) verbose mode")
 
 	options, arguments = p.parse_args(args=sys.argv)
 
-	parameters['cytomine_host'] = options.cytomine_host
-	parameters['cytomine_public_key'] = options.cytomine_public_key
-	parameters['cytomine_private_key'] = options.cytomine_private_key
-	parameters['cytomine_id_software'] = options.cytomine_id_software
-	parameters['cytomine_base_path'] = options.cytomine_base_path
-	parameters['cytomine_working_path'] = options.cytomine_working_path
-	parameters['cytomine_id_project'] = options.cytomine_id_project
-	parameters['cytomine_predict_images'] = options.cytomine_predict_images
-	parameters['model_load_from'] = options.model_load_from
-	parameters['model_names'] = options.model_names
-	parameters['image_type'] = options.image_type
-	parameters['verbose'] = str2bool(options.verbose)
-	cytomine_connection = cytomine.Cytomine(parameters['cytomine_host'], parameters['cytomine_public_key'], parameters['cytomine_private_key'], base_path=parameters['cytomine_base_path'], working_path=parameters['cytomine_working_path'], verbose=parameters['verbose'])
+	parameters = {
+		'cytomine_host': options.cytomine_host,
+		'cytomine_public_key': options.cytomine_public_key,
+		'cytomine_private_key': options.cytomine_private_key,
+		'cytomine_id_software': options.cytomine_id_software,
+		'cytomine_base_path': options.cytomine_base_path,
+		'cytomine_working_path': options.cytomine_working_path,
+		'cytomine_id_project': options.cytomine_id_project,
+		'cytomine_predict_images': options.cytomine_predict_images,
+		'model_load_from': options.model_load_from,
+		'cytomine_model_names': options.cytomine_model_names,
+		'image_type': options.image_type,
+		'verbose': str2bool(options.verbose)
+	}
 	parameters['cytomine_working_path'] = parameters['cytomine_working_path'].rstrip('/')+'/'
 	parameters['model_load_from'] = parameters['model_load_from'].rstrip('/')+'/'
+
+	cytomine_connection = cytomine.Cytomine(parameters['cytomine_host'], parameters['cytomine_public_key'], parameters['cytomine_private_key'], base_path=parameters['cytomine_base_path'], working_path=parameters['cytomine_working_path'], verbose=parameters['verbose'])
+
+	current_user = cytomine_connection.get_current_user()
+	run_by_user_job = False
+	if current_user.algo:
+		sys.path.append('/software_router/algo/landmark_model_builder/')
+		user_job = current_user
+		run_by_user_job = True
+	else:
+		sys.path.append('../landmark_model_builder/')
+		user_job = cytomine_connection.add_user_job(parameters['cytomine_id_software'], parameters['cytomine_id_project'])
+		cytomine_connection.set_credentials(str(user_job.publicKey), str(user_job.privateKey))
+
+	from download import *
+	from ldmtools import *
+	from build_generic_model import build_dataset_image
 
 	download_images(cytomine_connection, int(parameters['cytomine_id_project']))
 
 	repository = parameters['cytomine_working_path'] + str(parameters['cytomine_id_project']) + '/'
 
 	model_repo = parameters['model_load_from']
-	model_names = parameters['model_names'].split(',')
+	model_names = parameters['cytomine_model_names'].split(',')
 	nmodels = len(model_names)
 	image_type = parameters['image_type']
 	id_software = parameters['cytomine_id_software']
 	coords = {}
 	ips = []
+
 	Rs = []
 	RMAXs = []
 	proportions = []
@@ -169,34 +169,8 @@ if __name__ == "__main__":
 	feature_types = []
 	n = 0
 
-	current_user = cytomine_connection.get_current_user()
-	run_by_user_job = False
-	if current_user.algo:
-		user_job = current_user
-		run_by_user_job = True
-	else:
-		user_job = cytomine_connection.add_user_job(parameters['cytomine_id_software'], parameters['cytomine_id_project'])
-		cytomine_connection.set_credentials(str(user_job.publicKey), str(user_job.privateKey))
-
 	job = cytomine_connection.get_job(user_job.job)
 	job = cytomine_connection.update_job_status(job, status=job.RUNNING, progress=0, status_comment="Uploading annotations...")
-
-	job_parameters = {}
-	job_parameters['landmark_terms'] = ips
-	job_parameters['models_id_job'] = 0
-	job_parameters['landmark_r'] = Rs
-	job_parameters['landmark_rmax'] = RMAXs
-	job_parameters['landmark_p'] = proportions
-	job_parameters['landmark_npred'] = npreds
-	job_parameters['landmark_ntimes'] = ntimess
-	job_parameters['landmark_alpha'] = angranges
-	job_parameters['landmark_depth'] = depthss
-	job_parameters['landmark_window_size'] = window_sizes
-	job_parameters['forest_n_estimators'] = ntreess
-	job_parameters['model_feature_type'] = feature_types
-
-	if not run_by_user_job:
-		job_parameters_values = cytomine_connection.add_job_parameters(user_job.job, cytomine_connection.get_software(id_software), job_parameters)
 
 	progress = 0
 	delta = 90 / len(model_names)
@@ -215,9 +189,8 @@ if __name__ == "__main__":
 	for i in range(len(ims)):
 		idim_to_i[ims[i]]=i
 
-
+	hash_term = {}
 	hash_error = {}
-
 	for model in model_names:
 		F = open('%s%s.conf' % (model_repo, model))
 		par = {}
@@ -244,6 +217,11 @@ if __name__ == "__main__":
 		window_sizes.append(par['window_size'])
 		feature_types.append(par['feature_type'])
 		for id_term in term_list:
+			if id_term in hash_term:
+				print "Term %d was already predicted by another model. Only best prediction is kept for result matrix."
+			else:
+				hash_term[id_term]=1
+
 			mx, my, cm = joblib.load('%s%s_%d_cov.pkl' % (model_repo, model, id_term))
 			clf = joblib.load('%s%s_%d.pkl' % (model_repo, model, id_term))
 			if par['feature_type'] == 'haar':
@@ -255,7 +233,6 @@ if __name__ == "__main__":
 
 			progress += delta
 
-
 			for j in pr_im:
 				(x, y, y_o) = searchpoint_cytomine(repository, j, clf, mx, my, cm, 1. / (2. ** np.arange(int(depthss[n]))), int(window_sizes[n]), image_type, int(npreds[n]), par['feature_type'], fparams)
 				circle = Point(x, y)
@@ -266,9 +243,44 @@ if __name__ == "__main__":
 					xreal = xc[idim_to_i[j], t_to_i[id_term]]
 					yreal = yc[idim_to_i[j], t_to_i[id_term]]
 					er = np.linalg.norm([xreal-x,yreal-y_o])
-					print x,y_o,xreal,yreal,er
-					hash_error[model,id_term,j] = er
+					tup = (j,id_term)
+					if (tup in hash_error and er<hash_error[tup]) or (not (tup in hash_error)):
+						hash_error[(j,id_term)] = er
+
 		n += 1
 
 	job = cytomine_connection.update_job_status(job, status=job.TERMINATED, progress=100, status_comment="Annotations uploaded!")
+
+	csv_line = ";"
+	id_terms = hash_term.keys()
+	for id_term in id_terms:
+		csv_line+="%d;"%id_term
+	csv_line+="img_avg;\n"
+
+	cerror = {}
+	for id_term in id_terms:
+		cerror[id_term] = []
+
+	for id_img in pr_im:
+		csv_line+="%d;"%id_img
+		lerror = []
+		term_i=0
+		for id_term in id_terms:
+			lerror.append(hash_error[(id_img,id_term)])
+			csv_line+="%3.3f;"%hash_error[(id_img,id_term)]
+			cerror[id_term].append(hash_error[(id_img,id_term)])
+		csv_line+="%3.3f;\n"%np.mean(lerror)
+
+	csv_line+="term_avg;"
+	for id_term in id_terms:
+		csv_line+="%3.3f;"%np.mean(cerror[id_term])
+	csv_line+="%3.3f;"%np.mean(hash_error.values())
+	print csv_line
+
+	job_parameters = {}
+	job_parameters['cytomine_models'] = parameters['cytomine_model_names']
+	job_parameters['cytomine_predict_images'] = parameters['cytomine_predict_images']
+	job_parameters['prediction_error'] = csv_line
+	job_parameters_values = cytomine_connection.add_job_parameters(user_job.job, cytomine_connection.get_software(id_software), job_parameters)
+
 	print "Annotations uploaded!"
