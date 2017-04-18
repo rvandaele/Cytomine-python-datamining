@@ -20,16 +20,23 @@
 __author__ = "Vandaele Rémy <remy.vandaele@ulg.ac.be>"
 __contributors__ = ["Marée Raphaël <raphael.maree@ulg.ac.be>"]
 __copyright__ = "Copyright 2010-2016 University of Liège, Belgium, http://www.cytomine.be/"
+
 import sys
 from sklearn.externals import joblib
 from shapely.geometry import Point
 import optparse
 from cytomine import cytomine, models
+from download import *
+from ldmtools import *
+from build_generic_model import build_dataset_image
+
 
 """
 Given the classifier clf, this function will try to find the landmark on the
 image current
 """
+
+
 def searchpoint_cytomine(repository, current, clf, mx, my, cm, depths, window_size, image_type, npred, feature_type, feature_parameters):
 	simage = readimage(repository, current, image_type)
 	(height, width) = simage.shape
@@ -38,8 +45,8 @@ def searchpoint_cytomine(repository, current, clf, mx, my, cm, depths, window_si
 	x_v = np.round(P[:, 0] * width)
 	y_v = np.round(P[:, 1] * height)
 
-	height -=  1
-	width -=  1
+	height -= 1
+	width -= 1
 
 	n = len(x_v)
 	pos = 0
@@ -140,10 +147,6 @@ if __name__ == "__main__":
 		user_job = cytomine_connection.add_user_job(parameters['cytomine_id_software'], parameters['cytomine_id_project'])
 		cytomine_connection.set_credentials(str(user_job.publicKey), str(user_job.privateKey))
 
-	from download import *
-	from ldmtools import *
-	from build_generic_model import build_dataset_image
-
 	download_images(cytomine_connection, int(parameters['cytomine_id_project']))
 
 	repository = parameters['cytomine_working_path'] + str(parameters['cytomine_id_project']) + '/'
@@ -156,18 +159,7 @@ if __name__ == "__main__":
 	coords = {}
 	ips = []
 
-	Rs = []
-	RMAXs = []
-	proportions = []
-	npreds = []
-	ntreess = []
-	ntimess = []
-	angranges = []
-	depthss = []
-	steps = []
-	window_sizes = []
 	feature_types = []
-	n = 0
 
 	job = cytomine_connection.get_job(user_job.job)
 	job = cytomine_connection.update_job_status(job, status=job.RUNNING, progress=0, status_comment="Uploading annotations...")
@@ -187,7 +179,7 @@ if __name__ == "__main__":
 
 	idim_to_i = {}
 	for i in range(len(ims)):
-		idim_to_i[ims[i]]=i
+		idim_to_i[ims[i]] = i
 
 	hash_term = {}
 	hash_error = {}
@@ -205,22 +197,13 @@ if __name__ == "__main__":
 			term_list = [int(term) for term in par['cytomine_id_terms'].split(',')]
 
 		ips.append(par['cytomine_id_terms'])
-		Rs.append(par['model_R'])
-		RMAXs.append(par['model_RMAX'])
-		proportions.append(par['model_P'])
-		npreds.append(par['model_npred'])
-		ntreess.append(par['model_ntrees'])
-		ntimess.append(par['model_ntimes'])
-		angranges.append(par['model_angle'])
-		depthss.append(int(par['model_depth']))
-		steps.append(par['model_step'])
-		window_sizes.append(par['window_size'])
 		feature_types.append(par['feature_type'])
+
 		for id_term in term_list:
 			if id_term in hash_term:
 				print "Term %d was already predicted by another model. Only best prediction is kept for result matrix."
 			else:
-				hash_term[id_term]=1
+				hash_term[id_term] = 1
 
 			mx, my, cm = joblib.load('%s%s_%d_cov.pkl' % (model_repo, model, id_term))
 			clf = joblib.load('%s%s_%d.pkl' % (model_repo, model, id_term))
@@ -234,7 +217,7 @@ if __name__ == "__main__":
 			progress += delta
 
 			for j in pr_im:
-				(x, y, y_o) = searchpoint_cytomine(repository, j, clf, mx, my, cm, 1. / (2. ** np.arange(int(depthss[n]))), int(window_sizes[n]), image_type, int(npreds[n]), par['feature_type'], fparams)
+				(x, y, y_o) = searchpoint_cytomine(repository, j, clf, mx, my, cm, 1. / (2. ** np.arange(int(par['model_depth']))), int(par['window_size']), image_type, int(par['model_npred']), par['feature_type'], fparams)
 				circle = Point(x, y)
 				location = circle.wkt
 				new_annotation = cytomine_connection.add_annotation(location, j)
@@ -242,45 +225,41 @@ if __name__ == "__main__":
 				if j in idim_to_i:
 					xreal = xc[idim_to_i[j], t_to_i[id_term]]
 					yreal = yc[idim_to_i[j], t_to_i[id_term]]
-					er = np.linalg.norm([xreal-x,yreal-y_o])
-					tup = (j,id_term)
-					if (tup in hash_error and er<hash_error[tup]) or (not (tup in hash_error)):
-						hash_error[(j,id_term)] = er
-
-		n += 1
+					er = np.linalg.norm([xreal-x, yreal-y_o])
+					tup = (j, id_term)
+					if (tup in hash_error and er < hash_error[tup]) or (not (tup in hash_error)):
+						hash_error[(j, id_term)] = er
+		F.close()
 
 	job = cytomine_connection.update_job_status(job, status=job.TERMINATED, progress=100, status_comment="Annotations uploaded!")
 
 	csv_line = ";"
 	id_terms = hash_term.keys()
 	for id_term in id_terms:
-		csv_line+="%d;"%id_term
-	csv_line+="img_avg;\n"
+		csv_line += "%d;" % id_term
+	csv_line += "img_avg;\n"
 
 	cerror = {}
 	for id_term in id_terms:
 		cerror[id_term] = []
 
 	for id_img in pr_im:
-		csv_line+="%d;"%id_img
+		csv_line += "%d;" % id_img
 		lerror = []
-		term_i=0
+		term_i = 0
 		for id_term in id_terms:
-			lerror.append(hash_error[(id_img,id_term)])
-			csv_line+="%3.3f;"%hash_error[(id_img,id_term)]
-			cerror[id_term].append(hash_error[(id_img,id_term)])
-		csv_line+="%3.3f;\n"%np.mean(lerror)
+			lerror.append(hash_error[(id_img, id_term)])
+			csv_line += "%3.3f;" % hash_error[(id_img, id_term)]
+			cerror[id_term].append(hash_error[(id_img, id_term)])
+		csv_line += "%3.3f;\n" % np.mean(lerror)
 
-	csv_line+="term_avg;"
+	csv_line += "term_avg;"
 	for id_term in id_terms:
-		csv_line+="%3.3f;"%np.mean(cerror[id_term])
-	csv_line+="%3.3f;"%np.mean(hash_error.values())
+		csv_line += "%3.3f;" % np.mean(cerror[id_term])
+	csv_line += "%3.3f;" % np.mean(hash_error.values())
 	print csv_line
 
-	job_parameters = {}
-	job_parameters['cytomine_models'] = parameters['cytomine_model_names']
-	job_parameters['cytomine_predict_images'] = parameters['cytomine_predict_images']
-	job_parameters['prediction_error'] = csv_line
+	job_parameters = {'cytomine_models': parameters['cytomine_model_names'], 'cytomine_predict_images': parameters['cytomine_predict_images'], 'prediction_error': csv_line}
 	job_parameters_values = cytomine_connection.add_job_parameters(user_job.job, cytomine_connection.get_software(id_software), job_parameters)
 
 	print "Annotations uploaded!"
