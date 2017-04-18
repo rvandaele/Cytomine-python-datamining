@@ -1,22 +1,22 @@
 import numpy as np
-from sklearn.tree import ExtraTreeRegressor
+from sklearn.tree import ExtraTreeClassifier
 from multiprocessing import Pool
 
-def build_lonely_tree_regressor(X,y,max_features,max_depth,min_samples_split):
-	clf = ExtraTreeRegressor(max_features=max_features,max_depth=max_depth,min_samples_split=min_samples_split)
+def build_separate_tree(X,y,max_features,max_depth,min_samples_split):
+	clf = ExtraTreeClassifier(max_features=max_features,max_depth=max_depth,min_samples_split=min_samples_split)
 	clf = clf.fit(X,y)
 	return clf
 	
-def lonelytree_reg_training_mp_helper(jobargs):
-	return build_lonely_tree_regressor(*jobargs)
+def separatetree_training_mp_helper(jobargs):
+	return build_separate_tree(*jobargs)
 	
-def lonelytree_reg_test_mp_helper(jobargs):
-	return test_lonely_tree_reg(*jobargs)
+def separatetree_test_mp_helper(jobargs):
+	return test_separate_tree(*jobargs)
 
-def test_lonely_tree_reg(tree,X):
-	return tree.predict(X)
+def test_separate_tree(tree,X):
+	return tree.predict_proba(X)
 	
-class LonelyTreesRegressor:
+class SeparateTrees:
 
 	def __init__(self,n_estimators=10,max_features='auto',max_depth=None,min_samples_split=2,n_jobs=1):
 		self.n_estimators = n_estimators
@@ -34,35 +34,29 @@ class LonelyTreesRegressor:
 		
 		p = Pool(self.n_jobs)
 		jobargs = [(X[:,i*n_features:(i+1)*n_features],y,self.max_features,self.max_depth,self.min_samples_split) for i in range(self.n_estimators)]
-		self.trees = p.map(lonelytree_reg_training_mp_helper,jobargs)
+		self.trees = p.map(separatetree_training_mp_helper,jobargs)
 		p.close()
 		p.join()
 		
 		return self
 	
-	def predict(self,X):
+	def predict_proba(self,X):
 		(h,w) = X.shape
 		n_features = w/self.n_estimators	
 		p = Pool(self.n_jobs)
 		jobargs = [(self.trees[i],X[:,i*n_features:(i+1)*n_features]) for i in range(self.n_estimators)]
-		probas = p.map(lonelytree_reg_test_mp_helper,jobargs)
+		probas = p.map(separatetree_test_mp_helper,jobargs)
 		p.close()
 		p.join()
 		return np.sum(probas,axis=0)/float(self.n_estimators)
 
-	"""
 	def predict(self,X):
 		probas = self.predict_proba(X)
 		return np.argmax(probas,axis=1)
-	"""	
+		
 
 if __name__ == "__main__":
-
-	tr_data = np.random.ranf((10000,3200))
-	tr_rep = np.random.ranf((10000,2))
-	te_data = np.random.ranf((100,3200))
-	
-	clf = LonelyTreesRegressor(n_estimators=32,max_features=2,n_jobs=4)
-	clf.fit(tr_data,tr_rep)
-	#print clf.predict_proba(np.random.ranf((100,3200)))
-	print clf.predict(te_data)
+	clf = SeparateTrees(n_estimators=32,max_features=2,n_jobs=4)
+	clf.fit(np.random.ranf((10000,3200)),np.random.randint(0,2,10000))
+	print clf.predict_proba(np.random.ranf((100,3200)))
+	print clf.predict(np.random.ranf((100,3200)))

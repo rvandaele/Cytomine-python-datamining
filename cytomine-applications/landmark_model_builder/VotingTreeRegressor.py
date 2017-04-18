@@ -2,20 +2,25 @@ import numpy as np
 from sklearn.tree import ExtraTreeRegressor
 from multiprocessing import Pool
 
+
 def build_voting_tree_regressor(X,y,max_features,max_depth,min_samples_split):
 	clf = ExtraTreeRegressor(max_features=max_features,max_depth=max_depth,min_samples_split=min_samples_split)
 	clf = clf.fit(X,y)
 	return clf
-	
+
+
 def votingtree_reg_training_mp_helper(jobargs):
 	return build_voting_tree_regressor(*jobargs)
-	
+
+
 def votingtree_reg_test_mp_helper(jobargs):
 	return test_voting_tree_reg(*jobargs)
 
+
 def test_voting_tree_reg(tree,X):
 	return tree.predict(X)
-	
+
+
 class VotingTreeRegressor:
 
 	def __init__(self,n_estimators=10,max_features='auto',max_depth=None,min_samples_split=2,n_jobs=1):
@@ -48,14 +53,14 @@ class VotingTreeRegressor:
 		return probas
 		
 
-
-if __name__ == "__main__":
-
+def test():
 	tr_data = np.random.ranf((10000,3200))
 	tr_rep = np.random.ranf((10000,2))
 	te_data = np.random.ranf((100,3200))
-	
 	clf = VotingTreeRegressor(n_estimators=32,max_features=2,n_jobs=4)
 	clf.fit(tr_data,tr_rep)
-	#print clf.predict_proba(np.random.ranf((100,3200)))
-	print clf.predict(te_data)[1]
+	clf.predict(te_data)[1]
+
+
+if __name__ == "__main__":
+	test()
