@@ -22,7 +22,6 @@ __contributors__    = ["Marée Raphaël <raphael.maree@ulg.ac.be>"]
 __copyright__       = "Copyright 2010-2015 University of Liège, Belgium, http://www.cytomine.be/"
 
 import cytomine
-import sys
 
 #connect to cytomine : parameters to set
 cytomine_host=""
@@ -33,10 +32,8 @@ id_project=0
 #Connection to Cytomine Core
 conn = cytomine.Cytomine(cytomine_host, cytomine_public_key, cytomine_private_key, base_path = '/api/', working_path = '/tmp/', verbose= True)
 
-
-#define software parameter template
+#GENERIC
 software = conn.add_software("Generic_Landmark_Model_Builder", "pyxitSuggestedTermJobService","ValidateAnnotation")
-
 conn.add_software_parameter("cytomine_id_term",            software.id, "Number", None, True, 1 , False)
 conn.add_software_parameter("cytomine_training_images",    software.id, "String", None, True, 2,  False)
 conn.add_software_parameter("model_R",                     software.id, "Number", None, True, 3 , False)
@@ -57,14 +54,11 @@ conn.add_software_parameter("model_feature_type",          software.id, "String"
 conn.add_software_parameter("model_feature_haar_n",        software.id, "Number", None, True, 18, False)
 conn.add_software_parameter("model_feature_gaussian_n",    software.id, "Number", None, True, 19, False)
 conn.add_software_parameter("model_feature_gaussian_std",  software.id, "Number", None, True, 20, False)
-
-#add software to a given project
-addSoftwareProject = conn.add_software_project(id_project,software.id)
-
+conn.add_software_project(id_project,software.id)
 print "Generic Software id is %d"%software.id
 
-software = conn.add_software("Donner_Landmark_Model_Builder", "pyxitSuggestedTermJobService","ValidateAnnotation")
-
+#DMBL
+software = conn.add_software("DMBL_Landmark_Model_Builder", "pyxitSuggestedTermJobService","ValidateAnnotation")
 conn.add_software_parameter("cytomine_id_terms",               software.id, "String", None, True, 1 , False)
 conn.add_software_parameter("model_njobs",                     software.id, "Number", None, True, 2 , False)
 conn.add_software_parameter("model_NT_P1",                     software.id, "Number", None, True, 3 , False)
@@ -83,24 +77,22 @@ conn.add_software_parameter("model_n_iterations",              software.id, "Num
 conn.add_software_parameter("model_ncandidates",               software.id, "Number", None, True, 16, False)
 conn.add_software_parameter("model_sde",                       software.id, "Number", None, True, 17, False)
 conn.add_software_parameter("model_T",                         software.id, "Number", None, True, 18, False)
-#add software to a given project
-addSoftwareProject = conn.add_software_project(id_project,software.id)
+conn.add_software_project(id_project,software.id)
+print "DMBL Software id is %d"%software.id
 
-print "Donner Software id is %d"%software.id
-
-software = conn.add_software("Lindner_Landmark_Model_Builder", "pyxitSuggestedTermJobService","ValidateAnnotation")
-
+#LC
+software = conn.add_software("LC_Landmark_Model_Builder", "pyxitSuggestedTermJobService","ValidateAnnotation")
 conn.add_software_parameter("cytomine_id_terms", software.id, "String", None, True, 1, False)
-conn.add_software_parameter("model_njobs", software.id, "Number", None, True, 2, False)
-conn.add_software_parameter("model_D_MAX", software.id, "Number", None, True, 3, False)
-conn.add_software_parameter("model_n_samples", software.id, "Number", None, True, 4, False)
-conn.add_software_parameter("model_W", software.id, "Number", None, True, 5, False)
-conn.add_software_parameter("model_n", software.id, "Number", None, True, 6, False)
-conn.add_software_parameter("model_T", software.id, "Number", None, True, 7, False)
-conn.add_software_parameter("model_step", software.id, "Number", None, True, 8, False)
-conn.add_software_parameter("model_n_reduc", software.id, "Number", None, True, 9, False)
-conn.add_software_parameter("model_R_MAX", software.id, "Number", None, True,10, False)
-conn.add_software_parameter("model_R_MIN", software.id, "Number", None, True,11, False)
-conn.add_software_parameter("model_alpha", software.id, "Number", None, True,12, False)
-
-print "Lindner Software id is %d"%software.id
+conn.add_software_parameter("model_njobs",       software.id, "Number", None, True, 2, False)
+conn.add_software_parameter("model_D_MAX",       software.id, "Number", None, True, 3, False)
+conn.add_software_parameter("model_n_samples",   software.id, "Number", None, True, 4, False)
+conn.add_software_parameter("model_W",           software.id, "Number", None, True, 5, False)
+conn.add_software_parameter("model_n",           software.id, "Number", None, True, 6, False)
+conn.add_software_parameter("model_T",           software.id, "Number", None, True, 7, False)
+conn.add_software_parameter("model_step",        software.id, "Number", None, True, 8, False)
+conn.add_software_parameter("model_n_reduc",     software.id, "Number", None, True, 9, False)
+conn.add_software_parameter("model_R_MAX",       software.id, "Number", None, True,10, False)
+conn.add_software_parameter("model_R_MIN",       software.id, "Number", None, True,11, False)
+conn.add_software_parameter("model_alpha",       software.id, "Number", None, True,12, False)
+conn.add_software_project(id_project,software.id)
+print "LC Software id is %d"%software.id
