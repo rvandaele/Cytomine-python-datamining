@@ -1,15 +1,13 @@
-from LonelyTrees import LonelyTrees
-from LonelyTreesRegressor import LonelyTreesRegressor
+from SeparateTrees import SeparateTrees
+from SeparateTreesRegressor import SeparateTreesRegressor
 from ldmtools import *
 import numpy as np
 from multiprocessing import Pool
 import scipy.ndimage as snd
 from sklearn.externals import joblib
 from download import *
-
-"""
-Phase 1 : Pixel filtering
-"""
+import sys,cytomine
+import optparse
 
 
 def dataset_from_coordinates(img, x, y, feature_offsets):
@@ -97,8 +95,6 @@ def get_dataset_phase_1(repository, training_images, image_ids, n_jobs, feature_
 	return DATASET, REP, IMG
 
 
-# Input:  path to images, number of processors and specific phase 1 parameters
-# Output: a list of extratrees (or a class?) and the F parameters
 def build_phase_1_model(repository, tr_image=[], image_ids=[], n_jobs=1, NT=32, F=100, R=2, sigma=10, delta=0.25, P=1, X=None, Y=None):
 	std_matrix = np.eye(2) * (sigma ** 2)
 	feature_offsets = np.round(np.random.multivariate_normal([0, 0], std_matrix, NT * F)).astype('int')
@@ -131,7 +127,7 @@ def probability_map_phase_1(repository, image_number, clf, feature_offsets, delt
 	probability_map = None
 	nldms = -1
 
-	while (b < xs.size):
+	while b < xs.size:
 
 		next_b = min(b + step, xs.size)
 		dataset = dataset_from_coordinates(img, xs[b:next_b], ys[b:next_b], feature_offsets)
@@ -148,14 +144,7 @@ def probability_map_phase_1(repository, image_number, clf, feature_offsets, delt
 	return probability_map
 
 
-"""
-Phase 2: Agregation
-"""
-
-
 def image_dataset_phase_2(repository, image_number, x, y, feature_offsets, R_offsets, delta):
-	# print "PHASE 2 IMAGE NUMBER",image_number+1
-
 	img = makesize(snd.zoom(readimage(repository, image_number), delta), 1)
 	(h, w) = img.shape
 	mask = np.ones((h, w), 'bool')
@@ -187,12 +176,11 @@ def dataset_mp_helper_phase_2(jobargs):
 
 def get_dataset_phase_2(repository, tr_images, image_ids, n_jobs, id_term, feature_offsets, R_offsets, delta):
 	p = Pool(n_jobs)
-	# (Xc,Yc) = getcoords(repository.rstrip('/')+'/txt/')
 	(Xc, Yc, Xp, Yp, ims) = getcoords(repository.rstrip('/') + '/txt/', id_term)
 	nims = Xc.size
 	jobargs = []
 	for i in range(nims):
-		if (image_ids[i] in tr_images):
+		if image_ids[i] in tr_images:
 			jobargs.append((repository, image_ids[i], Xc[i], Yc[i], feature_offsets, R_offsets, delta))
 	data = p.map(dataset_mp_helper_phase_2, jobargs)
 	p.close()
@@ -216,7 +204,7 @@ def get_dataset_phase_2(repository, tr_images, image_ids, n_jobs, id_term, featu
 	NUMBER = NUMBER[0:b]
 	return DATASET, REP, NUMBER
 
-def build_phase_2_model(repository, tr_image=[], image_ids=[], n_jobs=1, IP=0, NT=32, F=100, R=3, N=500, sigma=10, delta=0.25):
+def build_phase_2_model(repository, tr_image=None, image_ids=None, n_jobs=1, IP=0, NT=32, F=100, R=3, N=500, sigma=10, delta=0.25):
 	std_matrix = np.eye(2) * (sigma ** 2)
 	feature_offsets = np.round(np.random.multivariate_normal([0, 0], std_matrix, NT * F)).astype('int')
 
@@ -241,24 +229,11 @@ def build_edgematrix_phase_3(Xc, Yc, sde, delta, T):
 	Yc = Yc * delta
 	(nims, nldms) = Xc.shape
 
-	(nims, nldms) = Xc.shape
-
 	differential_entropy = np.eye(nldms) + np.inf
 
 	c1 = np.zeros((nims, 2))
 	c2 = np.zeros((nims, 2))
 
-	# std_matrix = np.eye(2)*(sde**2)
-	"""
-	img = readimage(repository,1)
-	(height,width) = img.shape
-	height = int(np.round(height*delta))
-	width = int(np.round(width*delta))
-	img = None
-	coords = np.zeros((height*width,2))
-	coords[:,0] = np.floor(np.arange(height*width)/width)
-	coords[:,1] = np.mod(np.arange(height*width),width)
-	"""
 	for ldm1 in range(nldms):
 		c1[:, 0] = Xc[:, ldm1]
 		c1[:, 1] = Yc[:, ldm1]
@@ -282,12 +257,6 @@ def build_edgematrix_phase_3(Xc, Yc, sde, delta, T):
 
 
 def main():
-
-	"""
-	ncandidates = int(sys.argv[15])#3 number of candidates to consider for each landmark
-	sde = float(sys.argv[16])#50. variance value for the gaussian functions
-	T = int(sys.argv[17])#4 number of edges for each landmark
-	"""
 
 	p = optparse.OptionParser(description='Cytomine Landmark Detection : Model building', prog='Cytomine Landmark Detector : Model builder', version='0.1')
 	p.add_option('--cytomine_host', type="string", default='beta.cytomine.be', dest="cytomine_host", help="The Cytomine host (eg: beta.cytomine.be, localhost:8080)")
@@ -323,13 +292,12 @@ def main():
 
 	opt_parser, arguments = p.parse_args(args=sys.argv)
 
-
 	opt_parser.cytomine_working_path = opt_parser.cytomine_working_path.rstrip('/') + '/'
 	cytomine_connection = cytomine.Cytomine(opt_parser.cytomine_host, opt_parser.cytomine_public_key, opt_parser.cytomine_private_key, base_path=opt_parser.cytomine_base_path, working_path=opt_parser.cytomine_working_path, verbose=str2bool(opt_parser.verbose))
 
 	current_user = cytomine_connection.get_current_user()
-	run_by_user_job = False
-	if current_user.algo == False:
+
+	if not current_user.algo:
 		user_job = cytomine_connection.add_user_job(opt_parser.cytomine_id_software, opt_parser.cytomine_id_project)
 		cytomine_connection.set_credentials(str(user_job.publicKey), str(user_job.privateKey))
 	else:
@@ -360,10 +328,10 @@ def main():
 	job_parameters['model_T'] = opt_parser.model_T
 	model_repo = opt_parser.model_save_to
 
-	if (not os.path.isdir(model_repo)):
+	if not os.path.isdir(model_repo):
 		os.mkdir(model_repo)
 
-	if run_by_user_job == False:
+	if not run_by_user_job:
 		cytomine_connection.add_job_parameters(user_job.job, cytomine_connection.get_software(opt_parser.cytomine_id_software), job_parameters)
 
 	download_images(cytomine_connection, opt_parser.cytomine_id_project)
@@ -375,7 +343,7 @@ def main():
 	(nims, nldms) = xc.shape
 
 	if opt_parser.cytomine_id_terms != 'all':
-		term_list = [int(term) for term in opt_parser.cytomine_id_terms.split(',')]
+		term_list = np.sort([int(term) for term in opt_parser.cytomine_id_terms.split(',')])
 		Xc = np.zeros((nims, len(term_list)))
 		Yc = np.zeros(Xc.shape)
 		i = 0
@@ -384,7 +352,7 @@ def main():
 			Yc[:, i] = yc[:, term_to_i[id_term]]
 			i += 1
 	else:
-		term_list = term_to_i.keys()
+		term_list = np.sort(term_to_i.keys())
 		Xc = xc
 		Yc = yc
 
@@ -394,18 +362,19 @@ def main():
 		tr_im = [int(p) for p in opt_parser.cytomine_training_images.split(',')]
 
 	(dataset, rep, img, feature_offsets_1) = build_phase_1_model(repository, tr_image=tr_im, image_ids=ims, n_jobs=opt_parser.model_njobs, NT=opt_parser.model_NT_P1, F=opt_parser.model_F_P1, R=opt_parser.model_R_P1, sigma=opt_parser.model_sigma, delta=opt_parser.model_delta, P=opt_parser.model_P, X=Xc, Y=Yc)
-	clf = LonelyTrees(n_estimators=opt_parser.model_NT_P1, n_jobs=opt_parser.model_njobs)
+	clf = SeparateTrees(n_estimators=opt_parser.model_NT_P1, n_jobs=opt_parser.model_njobs)
 	clf = clf.fit(dataset, rep)
 
 	joblib.dump(clf, '%s%s_classifier_phase1.pkl' % (model_repo, opt_parser.model_name))
 	joblib.dump(feature_offsets_1, '%s%s_offsets_phase1.pkl' % (model_repo, opt_parser.model_name))
 
 	for id_term in term_list:
+
 		(dataset, rep, number, feature_offsets_2) = build_phase_2_model(repository, tr_image=tr_im, image_ids=ims, n_jobs=opt_parser.model_njobs, IP=id_term, NT=opt_parser.model_NT_P2, F=opt_parser.model_F_P2, R=opt_parser.model_R_P2, N=opt_parser.model_ns_P2, sigma=opt_parser.model_sigma, delta=opt_parser.model_delta)
-		reg = LonelyTreesRegressor(n_estimators=opt_parser.model_NT_P2, n_jobs=opt_parser.model_njobs)
+		reg = SeparateTreesRegressor(n_estimators=opt_parser.model_NT_P2, n_jobs=opt_parser.model_njobs)
 		reg.fit(dataset, rep)
-		joblib.dump(reg, '%s%s_donner_regressor_phase2_%d.pkl' % (model_repo, opt_parser.model_name, id_term))
-		joblib.dump(feature_offsets_2, '%s%s_donner_offsets_phase2_%d.pkl' % (model_repo, opt_parser.model_name, id_term))
+		joblib.dump(reg, '%s%s_dmbl_regressor_phase2_%d.pkl' % (model_repo, opt_parser.model_name, id_term))
+		joblib.dump(feature_offsets_2, '%s%s_dmbl_offsets_phase2_%d.pkl' % (model_repo, opt_parser.model_name, id_term))
 
 	(nims, nldms) = xc.shape
 	X = np.zeros((len(tr_im), nldms))
@@ -420,7 +389,7 @@ def main():
 	edges = build_edgematrix_phase_3(X, Y, opt_parser.model_sde, opt_parser.model_delta, opt_parser.model_T)
 	joblib.dump(edges, '%s%s_edgematrix_phase3.pkl' % (opt_parser.model_save_to, opt_parser.model_name))
 
-	F = open('%s%s_donner_parameters.conf' % (opt_parser.model_save_to, opt_parser.model_name), 'wb')
+	F = open('%s%s_dmbl_parameters.conf' % (opt_parser.model_save_to, opt_parser.model_name), 'wb')
 	F.write('cytomine_id_terms %s\n' % opt_parser.cytomine_id_terms)
 	F.write('model_njobs %d\n' % opt_parser.model_njobs)
 	F.write('model_NT_P1 %d\n' % opt_parser.model_NT_P1)
